@@ -11,14 +11,13 @@ from src.storage import agora_iso, registrar_evento
 from src.validacao import carregar_listas
 
 
-def adicionar_ensemble_feedback(metodos: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    pesos = pesos_por_feedback()
+def adicionar_ensemble_feedback(metodos: list[dict[str, Any]], proxima_lista_indice: int) -> list[dict[str, Any]]:
+    pesos = pesos_por_feedback(proxima_lista_indice=proxima_lista_indice)
     if not pesos:
         return metodos
 
     scores = np.zeros(25, dtype=float)
     total_peso = 0.0
-
     for metodo in metodos:
         codigo = metodo.get("codigo")
         previsao = metodo.get("previsao") or []
@@ -38,7 +37,7 @@ def adicionar_ensemble_feedback(metodos: list[dict[str, Any]]) -> list[dict[str,
         "nome": "Ensemble com feedback de pontuação",
         "previsao": previsao,
         "previsao_formatada": formatar_lista(previsao),
-        "descricao": "Combina métodos ponderando por feedbacks anteriores de pontuação, sem conhecer a lista real.",
+        "descricao": "Combina métodos com pesos derivados de feedbacks elegíveis, deduplicados e sem conhecer a lista real.",
         "status": "OK",
     })
     return metodos
@@ -47,18 +46,18 @@ def adicionar_ensemble_feedback(metodos: list[dict[str, Any]]) -> list[dict[str,
 def gerar_previsoes_multimetodo(registrar: bool = True) -> dict[str, Any]:
     listas = carregar_listas("data/raw/listas.txt")
     matriz = listas_para_matriz_binaria(listas)
+    proxima_lista_indice = len(listas) + 1
     metodos = gerar_previsoes_por_metodo(matriz)
-    metodos = adicionar_ensemble_feedback(metodos)
+    metodos = adicionar_ensemble_feedback(metodos, proxima_lista_indice=proxima_lista_indice)
 
     payload = {
         "timestamp": agora_iso(),
         "tipo": "previsao_multimetodo",
         "base_total_listas": len(listas),
-        "proxima_lista_indice": len(listas) + 1,
+        "proxima_lista_indice": proxima_lista_indice,
         "metodos": metodos,
         "observacao": "Previsões geradas sem conhecimento da lista real.",
     }
-
     if registrar:
         registrar_evento({
             "timestamp": payload["timestamp"],
@@ -66,16 +65,10 @@ def gerar_previsoes_multimetodo(registrar: bool = True) -> dict[str, Any]:
             "base_total_listas": payload["base_total_listas"],
             "proxima_lista_indice": payload["proxima_lista_indice"],
             "metodos_resumo": [
-                {
-                    "codigo": m["codigo"],
-                    "nome": m["nome"],
-                    "previsao_formatada": m["previsao_formatada"],
-                    "status": m["status"],
-                }
+                {"codigo": m["codigo"], "nome": m["nome"], "previsao_formatada": m["previsao_formatada"], "status": m["status"]}
                 for m in metodos
             ],
         })
-
     return payload
 
 

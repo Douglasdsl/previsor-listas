@@ -8,7 +8,7 @@ from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.feedback import salvar_feedback_pontuacao, resumo_feedbacks
+from src.feedback import salvar_feedback_pontuacao, resumo_feedbacks, canonicalizar_feedbacks_keep_first
 from src.multi_predict import gerar_previsoes_multimetodo
 from src.recomendacao import gerar_recomendacao
 from src.service import avaliar_lista_real, gerar_previsao, historico, normalizar_lista, obter_status
@@ -212,7 +212,7 @@ def feedback_resumo(request: Request):
         f"<tr><td>{escape(m['codigo'])}</td><td>{escape(m['nome'])}</td><td>{m['n']}</td><td>{m['media']}</td><td>{m['max']}</td><td>{m['min']}</td></tr>"
         for m in resumo.get("metodos", [])
     )
-    corpo = f"<div class='card'><h2>Resumo de feedbacks sem lista real</h2><p>Total de eventos: {resumo.get('total_eventos')}</p><table><tr><th>Código</th><th>Nome</th><th>N</th><th>Média</th><th>Máx.</th><th>Mín.</th></tr>{linhas}</table></div>"
+    corpo = f"<div class='card'><h2>Resumo de feedbacks sem lista real</h2><p>Total bruto: {resumo.get('total_eventos_brutos')}</p><p>Total efetivo: {resumo.get('total_eventos_efetivos')}</p><form method='post' action='/admin/feedback/canonicalizar'><button type='submit'>Limpar duplicidades mantendo primeiro feedback por bloco</button></form><table><tr><th>Código</th><th>Nome</th><th>N</th><th>Média</th><th>Máx.</th><th>Mín.</th></tr>{linhas}</table></div>"
     return pagina("Resumo de feedbacks", corpo)
 
 
@@ -228,12 +228,10 @@ def pagina_recomendacao(request: Request):
           <p><strong>Nome:</strong> {escape(str(rec.get('nome')))}</p>
           <p><strong>Próxima lista prevista:</strong> {escape(str(dados.get('proxima_lista_indice')))}</p>
           <p class='nums'>{escape(str(rec.get('previsao_formatada')))}</p>
-          <p class='small'>A recomendação usa somente feedbacks de pontuação. A lista real não foi salva nem conhecida pelo backend.</p>
         </div>
         """
     else:
         bloco_rec = "<div class='card'><p class='warn'>Nenhuma recomendação disponível.</p></div>"
-
     linhas = "".join(
         f"<tr><td>{escape(str(m['codigo']))}</td><td>{escape(str(m['nome']))}</td><td>{escape(str(m['status']))}</td><td>{m['feedback_n']}</td><td>{'' if m['feedback_media'] is None else m['feedback_media']}</td><td class='nums'>{escape(str(m['previsao_formatada']))}</td></tr>"
         for m in dados.get("metodos", [])
@@ -241,19 +239,34 @@ def pagina_recomendacao(request: Request):
     corpo = f"""
     {bloco_rec}
     <div class='card'>
-      <h2>Base e feedback</h2>
+      <h2>Governança de feedback</h2>
       <p><strong>Base atual:</strong> {dados.get('base_total_listas')} listas</p>
-      <p><strong>Eventos de feedback:</strong> {dados.get('feedback_total_eventos')}</p>
+      <p><strong>Feedbacks brutos:</strong> {dados.get('feedback_total_eventos_brutos')}</p>
+      <p><strong>Feedbacks efetivos:</strong> {dados.get('feedback_total_eventos_efetivos')}</p>
+      <p class='small'>{escape(str(dados.get('observacao')))}</p>
     </div>
     <div class='card'>
       <h2>Métodos considerados</h2>
-      <table>
-        <tr><th>Código</th><th>Nome</th><th>Status</th><th>Feedback N</th><th>Média</th><th>Previsão</th></tr>
-        {linhas}
-      </table>
+      <table><tr><th>Código</th><th>Nome</th><th>Status</th><th>Feedback N</th><th>Média</th><th>Previsão</th></tr>{linhas}</table>
     </div>
     """
     return pagina("Recomendação por Feedback", corpo)
+
+
+@app.post("/admin/feedback/canonicalizar", response_class=HTMLResponse)
+def admin_feedback_canonicalizar(request: Request):
+    resultado = canonicalizar_feedbacks_keep_first()
+    corpo = f"""
+    <div class='card'>
+      <h2>Canonicalização de feedback</h2>
+      <p><strong>Alterado:</strong> {resultado.get('alterado')}</p>
+      <p><strong>Mantidos:</strong> {resultado.get('mantidos')}</p>
+      <p><strong>Removidos:</strong> {resultado.get('removidos')}</p>
+      <p><strong>Backup:</strong> <code>{escape(str(resultado.get('backup')))}</code></p>
+      <p><a href='/feedback-resumo'>Voltar ao resumo</a></p>
+    </div>
+    """
+    return pagina("Canonicalização feedback", corpo)
 
 
 @app.get("/avaliar", response_class=HTMLResponse)
