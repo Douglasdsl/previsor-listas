@@ -49,6 +49,7 @@ document.addEventListener('DOMContentLoaded', function () {
     linhas.push('RELATORIO_PONTUACAO_CEGA_SEM_NUMEROS');
     linhas.push('base_total_listas=' + document.body.dataset.baseTotalListas);
     linhas.push('lista_indice=' + document.body.dataset.listaIndice);
+    if (document.body.dataset.blocoId) linhas.push('bloco_id=' + document.body.dataset.blocoId);
     resultados.forEach(function (r) {
       linhas.push(r.codigo + ';' + r.nome + ';' + r.nota);
     });

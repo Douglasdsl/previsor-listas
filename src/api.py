@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.feedback import salvar_feedback_pontuacao, resumo_feedbacks, canonicalizar_feedbacks_keep_first
 from src.multi_predict import gerar_previsoes_multimetodo
+from src.lab import gerar_laboratorio_pos_feedback
 from src.post_feedback import gerar_recomendacao_pos_feedback
 from src.recomendacao import gerar_recomendacao
 from src.service import avaliar_lista_real, gerar_previsao, historico, normalizar_lista, obter_status
@@ -53,6 +54,7 @@ def pagina(titulo: str, corpo: str, body_attrs: str = "") -> HTMLResponse:
     <a href="/feedback-resumo">Feedbacks</a>
     <a href="/recomendacao">Recomendação</a>
     <a href="/recomendacao-pos-feedback">Pós-feedback</a>
+    <a href="/laboratorio-pos-feedback">Lab pós-feedback</a>
     <a href="/avaliar">Avaliar lista real</a>
     <a href="/historico">Histórico</a>
     <a href="/api/status">API status</a>
@@ -180,6 +182,7 @@ def feedback_pontuacao(
     scores_text: str = Form(""),
     lista_indice: int | None = Form(None),
     base_total_listas: int | None = Form(None),
+    bloco_id: str = Form("principal"),
 ):
     try:
         if not scores_text.strip():
@@ -187,7 +190,7 @@ def feedback_pontuacao(
                 "Feedback não enviado",
                 "<div class='card'><h2>Feedback não enviado</h2><p class='err'>Nenhuma pontuação foi recebida.</p><p>Volte para <a href='/metodos'>/metodos</a>, pontue localmente e envie novamente.</p></div>",
             )
-        payload = salvar_feedback_pontuacao(scores_text, lista_indice=lista_indice, base_total_listas=base_total_listas)
+        payload = salvar_feedback_pontuacao(scores_text, lista_indice=lista_indice, base_total_listas=base_total_listas, bloco_id=bloco_id)
         resumo = resumo_feedbacks()
         linhas = "".join(
             f"<tr><td>{escape(m['codigo'])}</td><td>{escape(m['nome'])}</td><td>{m['n']}</td><td>{m['media']}</td><td>{m['max']}</td><td>{m['min']}</td></tr>"
@@ -316,6 +319,54 @@ def pagina_recomendacao_pos_feedback(request: Request):
     </div>
     """
     return pagina("Recomendação Pós-feedback", corpo)
+
+
+@app.get("/laboratorio-pos-feedback", response_class=HTMLResponse)
+def pagina_laboratorio_pos_feedback(request: Request):
+    dados = gerar_laboratorio_pos_feedback()
+    metodos_json = json.dumps(dados["metodos"], ensure_ascii=False).replace("</", "<\\/")
+    linhas = []
+    for i, m in enumerate(dados["metodos"], start=1):
+        codigo = escape(str(m.get("codigo", "")))
+        nome = escape(str(m.get("nome", "")))
+        descricao = escape(str(m.get("descricao", "")))
+        previsao = escape(str(m.get("previsao_formatada", "")))
+        status = escape(str(m.get("status", "")))
+        linhas.append(f"""
+        <tr data-codigo="{codigo}">
+          <td>{i}</td><td><strong>{nome}</strong><br><span class='small'><code>{codigo}</code><br>{descricao}</span></td>
+          <td class='nums'>{previsao}</td><td>{status}</td><td class='score-cego'>-</td>
+        </tr>
+        """)
+    corpo = f"""
+    <div class='card'>
+      <h2>Laboratório pós-feedback</h2>
+      <p class='warn'>Bloco experimental novo. Uma única pontuação permitida para este bloco.</p>
+      <p><strong>Base usada:</strong> {dados['base_total_listas']} listas</p>
+      <p><strong>Lista referência:</strong> {dados['lista_indice']}</p>
+      <p><strong>Bloco:</strong> <code>{escape(dados['bloco_id'])}</code></p>
+    </div>
+    <div class='card'>
+      <h2>Pontuação cega local</h2>
+      <textarea id='lista-real-cega' placeholder='Cole aqui a lista real somente para pontuação local.'></textarea><br><br>
+      <button type='button' id='btn-pontuar'>Pontuar localmente sem enviar ao backend</button>
+      <button type='button' id='btn-limpar'>Limpar</button>
+      <button type='button' id='btn-copiar'>Copiar relatório sem números</button>
+      <p id='status-cego' class='small'></p>
+      <form id='form-feedback-pontuacao' method='post' action='/feedback-pontuacao'>
+        <textarea id='relatorio-cego' name='scores_text' placeholder='Após pontuar, será gerado aqui um relatório sem expor números acertados.'></textarea>
+        <input type='hidden' name='lista_indice' value='{dados['lista_indice']}'>
+        <input type='hidden' name='base_total_listas' value='{dados['base_total_listas']}'>
+        <input type='hidden' name='bloco_id' value='{escape(dados['bloco_id'])}'>
+        <br><button type='submit'>Enviar somente pontuações ao backend</button>
+      </form>
+    </div>
+    <div class='card'><h2>Candidatas</h2><table id='tabela-metodos'><tr><th>#</th><th>Método</th><th>Previsão</th><th>Status</th><th>Nota cega local</th></tr>{''.join(linhas)}</table></div>
+    <script id='metodos-json' type='application/json'>{metodos_json}</script>
+    <script src='/static/metodos.js?v=5h'></script>
+    """
+    body_attrs = f"data-base-total-listas=\"{dados['base_total_listas']}\" data-lista-indice=\"{dados['lista_indice']}\" data-bloco-id=\"{escape(dados['bloco_id'])}\""
+    return pagina("Laboratório Pós-feedback", corpo, body_attrs=body_attrs)
 
 
 @app.get("/api/status")
