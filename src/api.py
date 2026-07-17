@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.feedback import salvar_feedback_pontuacao, resumo_feedbacks, canonicalizar_feedbacks_keep_first
 from src.multi_predict import gerar_previsoes_multimetodo
+from src.post_feedback import gerar_recomendacao_pos_feedback
 from src.recomendacao import gerar_recomendacao
 from src.service import avaliar_lista_real, gerar_previsao, historico, normalizar_lista, obter_status
 
@@ -51,6 +52,7 @@ def pagina(titulo: str, corpo: str, body_attrs: str = "") -> HTMLResponse:
     <a href="/metodos">Bancada cega multi-método</a>
     <a href="/feedback-resumo">Feedbacks</a>
     <a href="/recomendacao">Recomendação</a>
+    <a href="/recomendacao-pos-feedback">Pós-feedback</a>
     <a href="/avaliar">Avaliar lista real</a>
     <a href="/historico">Histórico</a>
     <a href="/api/status">API status</a>
@@ -282,6 +284,38 @@ def pagina_historico(request: Request):
         linhas.append(f"<tr><td>{escape(str(e.get('timestamp', '')))}</td><td>{escape(str(e.get('tipo', '')))}</td><td>{escape(str(e))}</td></tr>")
     corpo = "<div class='card'><h2>Histórico</h2><table><tr><th>Data/hora</th><th>Tipo</th><th>Evento</th></tr>" + "".join(linhas) + "</table></div>"
     return pagina("Histórico", corpo)
+
+
+@app.get("/recomendacao-pos-feedback", response_class=HTMLResponse)
+def pagina_recomendacao_pos_feedback(request: Request):
+    dados = gerar_recomendacao_pos_feedback()
+    linhas_componentes = "".join(
+        f"<tr><td>{escape(str(c['codigo']))}</td><td>{escape(str(c['nome']))}</td><td>{c['peso']}</td><td class='nums'>{escape(str(c['previsao_formatada']))}</td></tr>"
+        for c in dados.get("componentes", [])
+    )
+    linhas_feedback = "".join(
+        f"<tr><td>{escape(str(m['codigo']))}</td><td>{escape(str(m['nome']))}</td><td>{m['n']}</td><td>{m['media']}</td><td>{m['max']}</td><td>{m['min']}</td></tr>"
+        for m in dados.get("feedback_resumo", {}).get("metodos", [])
+    )
+    corpo = f"""
+    <div class='card'>
+      <h2>Recomendação pós-feedback experimental</h2>
+      <p class='warn'>Esta recomendação usa feedback de pontuação já recebido. Não é validação cega da lista de referência.</p>
+      <p><strong>Base atual:</strong> {dados.get('base_total_listas')} listas</p>
+      <p><strong>Lista de referência:</strong> {dados.get('lista_referencia')}</p>
+      <p class='nums'>{escape(str(dados.get('previsao_formatada')))}</p>
+      <p class='small'>{escape(str(dados.get('observacao')))}</p>
+    </div>
+    <div class='card'>
+      <h2>Componentes ponderados</h2>
+      <table><tr><th>Código</th><th>Nome</th><th>Peso</th><th>Previsão</th></tr>{linhas_componentes}</table>
+    </div>
+    <div class='card'>
+      <h2>Feedback efetivo usado</h2>
+      <table><tr><th>Código</th><th>Nome</th><th>N</th><th>Média</th><th>Máx.</th><th>Mín.</th></tr>{linhas_feedback}</table>
+    </div>
+    """
+    return pagina("Recomendação Pós-feedback", corpo)
 
 
 @app.get("/api/status")
