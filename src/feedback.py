@@ -12,34 +12,46 @@ from src.storage import DATA_PROCESSED, agora_iso, registrar_evento
 FEEDBACK_JSONL = DATA_PROCESSED / "feedback_pontuacao.jsonl"
 
 
+IGNORAR_PREFIXOS = (
+    "RELATORIO_",
+    "base_total_listas=",
+    "lista_indice=",
+    "gerado_em=",
+)
+
+
 def parse_feedback_text(texto: str) -> list[dict[str, Any]]:
     """
-    Parseia pontuações sem receber a lista real.
+    Parseia pontuacoes sem receber a lista real.
 
-    Formatos aceitos por linha:
-    - codigo;nota
-    - codigo;nome;nota
-    - codigo=nota
-    - codigo nota
+    Linhas aceitas:
+        codigo;nome;nota
+        codigo;nota
+        codigo nota
+
+    Linhas de cabecalho/metadados sao ignoradas.
     """
     itens: list[dict[str, Any]] = []
+
     for raw in (texto or "").splitlines():
         linha = raw.strip()
         if not linha or linha.startswith("#"):
             continue
+        if linha.startswith(IGNORAR_PREFIXOS):
+            continue
 
-        partes = [p.strip() for p in re.split(r"[;=,\t]+", linha) if p.strip()]
-        if len(partes) == 1:
+        if ";" in linha:
+            partes = [p.strip() for p in linha.split(";") if p.strip()]
+        else:
             partes = linha.split()
 
         if len(partes) < 2:
-            raise ValueError(f"Linha de feedback inválida: {linha}")
+            raise ValueError(f"Linha de feedback invalida: {linha}")
 
-        # Nota é o último campo inteiro da linha.
         try:
             nota = int(partes[-1])
         except ValueError as exc:
-            raise ValueError(f"Nota inválida na linha: {linha}") from exc
+            raise ValueError(f"Nota invalida na linha: {linha}") from exc
 
         if nota < 0 or nota > 15:
             raise ValueError(f"Nota fora do intervalo 0..15 na linha: {linha}")
@@ -48,12 +60,12 @@ def parse_feedback_text(texto: str) -> list[dict[str, Any]]:
         nome = partes[1] if len(partes) >= 3 else codigo
 
         if not re.fullmatch(r"[A-Za-z0-9_\-]+", codigo):
-            raise ValueError(f"Código de método inválido: {codigo}")
+            raise ValueError(f"Codigo de metodo invalido: {codigo}")
 
         itens.append({"codigo": codigo, "nome": nome, "nota": nota})
 
     if not itens:
-        raise ValueError("Nenhuma pontuação válida encontrada")
+        raise ValueError("Nenhuma pontuacao valida encontrada")
 
     return itens
 
@@ -74,7 +86,7 @@ def salvar_feedback_pontuacao(
         "lista_indice": lista_indice,
         "base_total_listas": base_total_listas,
         "scores": itens,
-        "observacao": "Feedback contém somente notas por método. A lista real não foi enviada nem salva.",
+        "observacao": "Feedback contem somente notas por metodo. A lista real nao foi enviada nem salva.",
     }
 
     with FEEDBACK_JSONL.open("a", encoding="utf-8") as fp:
@@ -88,17 +100,18 @@ def salvar_feedback_pontuacao(
         "scores_resumo": itens,
         "observacao": payload["observacao"],
     })
+
     return payload
 
 
 def carregar_feedbacks() -> list[dict[str, Any]]:
     if not FEEDBACK_JSONL.exists():
         return []
-    eventos = []
-    for linha in FEEDBACK_JSONL.read_text(encoding="utf-8").splitlines():
-        if linha.strip():
-            eventos.append(json.loads(linha))
-    return eventos
+    return [
+        json.loads(linha)
+        for linha in FEEDBACK_JSONL.read_text(encoding="utf-8").splitlines()
+        if linha.strip()
+    ]
 
 
 def resumo_feedbacks() -> dict[str, Any]:
@@ -125,23 +138,12 @@ def resumo_feedbacks() -> dict[str, Any]:
         })
 
     metodos.sort(key=lambda x: (-x["media"], x["codigo"]))
-    return {
-        "total_eventos": len(eventos),
-        "metodos": metodos,
-    }
+    return {"total_eventos": len(eventos), "metodos": metodos}
 
 
 def pesos_por_feedback() -> dict[str, float]:
-    """
-    Gera pesos de método a partir das médias de feedback.
-
-    Regra conservadora:
-    - média <= 9 recebe peso 1;
-    - acima de 9 ganha peso adicional proporcional;
-    - limite superior 3 para evitar explosão por poucos eventos.
-    """
     resumo = resumo_feedbacks()
-    pesos = {}
+    pesos: dict[str, float] = {}
     for item in resumo["metodos"]:
         media = float(item["media"])
         peso = 1.0 + max(0.0, media - 9.0) / 2.0
