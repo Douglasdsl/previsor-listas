@@ -1,0 +1,12 @@
+{
+  "status": "NAO_APROVADO_PARA_META_90_95",
+  "melhor_baseline": "baseline_frequencia_acumulada",
+  "melhor_modelo_geral": "extra_trees_janela_3",
+  "media_melhor_baseline": 9.055258467023172,
+  "media_melhor_modelo": 9.065953654188949,
+  "ganho_medio": 0.010695187165776332,
+  "limiar_ganho_material": 0.25,
+  "ganho_material": false,
+  "meta_90_95_suportada": false,
+  "previsao_operacional_baseline": "01 02 03 04 05 10 11 12 13 14 15 20 22 24 25"
+}
