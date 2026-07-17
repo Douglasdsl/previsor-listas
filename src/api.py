@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.feedback import salvar_feedback_pontuacao, resumo_feedbacks
 from src.multi_predict import gerar_previsoes_multimetodo
+from src.recomendacao import gerar_recomendacao
 from src.service import avaliar_lista_real, gerar_previsao, historico, normalizar_lista, obter_status
 
 
@@ -49,6 +50,7 @@ def pagina(titulo: str, corpo: str, body_attrs: str = "") -> HTMLResponse:
     <a href="/">Painel</a>
     <a href="/metodos">Bancada cega multi-método</a>
     <a href="/feedback-resumo">Feedbacks</a>
+    <a href="/recomendacao">Recomendação</a>
     <a href="/avaliar">Avaliar lista real</a>
     <a href="/historico">Histórico</a>
     <a href="/api/status">API status</a>
@@ -212,6 +214,46 @@ def feedback_resumo(request: Request):
     )
     corpo = f"<div class='card'><h2>Resumo de feedbacks sem lista real</h2><p>Total de eventos: {resumo.get('total_eventos')}</p><table><tr><th>Código</th><th>Nome</th><th>N</th><th>Média</th><th>Máx.</th><th>Mín.</th></tr>{linhas}</table></div>"
     return pagina("Resumo de feedbacks", corpo)
+
+
+@app.get("/recomendacao", response_class=HTMLResponse)
+def pagina_recomendacao(request: Request):
+    dados = gerar_recomendacao()
+    rec = dados.get("recomendada")
+    if rec:
+        bloco_rec = f"""
+        <div class='card'>
+          <h2>Recomendação operacional</h2>
+          <p><strong>Método:</strong> <code>{escape(str(rec.get('codigo')))}</code></p>
+          <p><strong>Nome:</strong> {escape(str(rec.get('nome')))}</p>
+          <p><strong>Próxima lista prevista:</strong> {escape(str(dados.get('proxima_lista_indice')))}</p>
+          <p class='nums'>{escape(str(rec.get('previsao_formatada')))}</p>
+          <p class='small'>A recomendação usa somente feedbacks de pontuação. A lista real não foi salva nem conhecida pelo backend.</p>
+        </div>
+        """
+    else:
+        bloco_rec = "<div class='card'><p class='warn'>Nenhuma recomendação disponível.</p></div>"
+
+    linhas = "".join(
+        f"<tr><td>{escape(str(m['codigo']))}</td><td>{escape(str(m['nome']))}</td><td>{escape(str(m['status']))}</td><td>{m['feedback_n']}</td><td>{'' if m['feedback_media'] is None else m['feedback_media']}</td><td class='nums'>{escape(str(m['previsao_formatada']))}</td></tr>"
+        for m in dados.get("metodos", [])
+    )
+    corpo = f"""
+    {bloco_rec}
+    <div class='card'>
+      <h2>Base e feedback</h2>
+      <p><strong>Base atual:</strong> {dados.get('base_total_listas')} listas</p>
+      <p><strong>Eventos de feedback:</strong> {dados.get('feedback_total_eventos')}</p>
+    </div>
+    <div class='card'>
+      <h2>Métodos considerados</h2>
+      <table>
+        <tr><th>Código</th><th>Nome</th><th>Status</th><th>Feedback N</th><th>Média</th><th>Previsão</th></tr>
+        {linhas}
+      </table>
+    </div>
+    """
+    return pagina("Recomendação por Feedback", corpo)
 
 
 @app.get("/avaliar", response_class=HTMLResponse)
