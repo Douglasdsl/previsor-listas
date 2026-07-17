@@ -1,0 +1,23 @@
+[Unit]
+Description=Previsor de Listas Web MVP
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lourodsl
+Group=lourodsl
+WorkingDirectory=/srv/factory/apps/previsor-listas
+Environment=PYTHONUNBUFFERED=1
+Environment=PREVISOR_HOST=0.0.0.0
+Environment=PREVISOR_PORT=8015
+ExecStart=/srv/factory/apps/previsor-listas/.venv/bin/uvicorn src.api:app --host ${PREVISOR_HOST} --port ${PREVISOR_PORT}
+Restart=on-failure
+RestartSec=3
+
+# Hardening leve, sem quebrar escrita local em data/processed.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
