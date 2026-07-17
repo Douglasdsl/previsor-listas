@@ -8,3 +8,19 @@ data/reports/*.csv
 reports/*.html
 reports/*.png
 .env
+
+# Dados brutos locais
+data/raw/*
+!data/raw/.gitkeep
+
+# Dados processados gerados
+data/processed/*
+!data/processed/.gitkeep
+
+# Relatórios tabulares gerados
+data/reports/*
+!data/reports/.gitkeep
+# Caches Python
+# Artefatos locais de trabalho
+worktrees/
+# Modelos treinados
